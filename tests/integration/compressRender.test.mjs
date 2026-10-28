@@ -5,6 +5,8 @@ import { createCanvas } from 'canvas';
 import { compressPdfByRasterization } from '../../src/pdf-core/compress.mjs';
 import { createNodeRenderer } from '../helpers/nodeRenderer.mjs';
 
+import { inspectMetadata } from '../../src/pdf-core/metadata.mjs';
+
 test('compress integration: compresses an image-rich PDF and verifies output', async () => {
   // Create an image-heavy PDF (photo-like gradient)
   const c = createCanvas(400, 400);
@@ -34,9 +36,17 @@ test('compress integration: compresses an image-rich PDF and verifies output', a
 
   assert.equal(result.pageCount, 1);
   assert.ok(result.bytes.byteLength > 0);
+  assert.ok(result.compressedBytes < originalBytes.byteLength, 'compressed size should be smaller than original');
+
   // Verify it's a valid readable PDF
   const outputDoc = await PDFDocument.load(result.bytes);
   assert.equal(outputDoc.getPageCount(), 1);
   assert.equal(outputDoc.getPage(0).getWidth(), 400);
   assert.equal(outputDoc.getPage(0).getHeight(), 400);
+
+  // Verify metadata is sanitized
+  const { metadata } = await inspectMetadata(result.bytes);
+  assert.equal(metadata.producer, '');
+  assert.equal(metadata.author, '');
+  assert.equal(metadata.title, '');
 });

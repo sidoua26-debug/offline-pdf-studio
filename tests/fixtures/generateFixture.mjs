@@ -1,6 +1,7 @@
 import { writeFile, mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { PDFDocument, StandardFonts, rgb, degrees } from 'pdf-lib';
+import { createCanvas } from 'canvas';
 
 const outPath = resolve('tests/fixtures/sample.pdf');
 await mkdir(dirname(outPath), { recursive: true });
@@ -42,4 +43,21 @@ sPage2.drawText('Second page safe text', { x: 50, y: 300, size: 16, font: sFont 
 const secretBytes = await secretPdf.save();
 await writeFile(secretPath, secretBytes);
 console.log(`Generated fixture at ${secretPath} (${secretBytes.byteLength} bytes)`);
+
+const scannedPath = resolve('tests/fixtures/scanned.pdf');
+const scannedPdf = await PDFDocument.create();
+const c = createCanvas(300, 300);
+const ctx = c.getContext('2d');
+for (let y = 0; y < 300; y += 1) {
+  for (let x = 0; x < 300; x += 1) {
+    ctx.fillStyle = `rgb(${(x * 2) % 256}, ${(y * 2) % 256}, ${((x + y) * 3) % 256})`;
+    ctx.fillRect(x, y, 1, 1);
+  }
+}
+const img = await scannedPdf.embedPng(c.toBuffer('image/png'));
+const page = scannedPdf.addPage([300, 300]);
+page.drawImage(img, { x: 0, y: 0, width: 300, height: 300 });
+const scannedBytes = await scannedPdf.save();
+await writeFile(scannedPath, scannedBytes);
+console.log(`Generated fixture at ${scannedPath} (${scannedBytes.byteLength} bytes)`);
 

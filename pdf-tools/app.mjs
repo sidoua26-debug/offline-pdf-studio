@@ -33,12 +33,20 @@ const ERROR_TEXT = {
   WORKER_CRASHED: 'The background worker stopped unexpectedly. Reload the page and try again.',
   LIMIT_MERGE_TOTAL: 'The files together are too large to merge in the browser.',
   INVALID_COMPRESSION_QUALITY: 'Invalid compression quality value.',
-  INVALID_COMPRESSION_SCALE: 'Invalid compression resolution scale.'
+  INVALID_COMPRESSION_SCALE: 'Invalid compression resolution scale.',
+  NOT_COMPRESSIBLE: 'The compressed file would be larger than the original. Client-side compression works on scanned and image-heavy PDFs; text-only PDFs are already optimal.'
 };
 const fail = (error) => {
   console.error(error);
   const base = ERROR_TEXT[error.code] ?? `Something went wrong: ${error.message}`;
-  const detail = error.code === 'REDACTION_FAIL_CLOSED' && error.details?.cause ? ` (${error.details.cause})` : '';
+  let detail = '';
+  if (error.code === 'REDACTION_FAIL_CLOSED' && error.details?.cause) {
+    detail = ` (${error.details.cause})`;
+  } else if (error.code === 'NOT_COMPRESSIBLE' && error.details?.originalBytes && error.details?.compressedBytes) {
+    const orig = (error.details.originalBytes / 1024).toFixed(0);
+    const comp = (error.details.compressedBytes / 1024).toFixed(0);
+    detail = ` (Original: ${orig} KB, rasterized: ${comp} KB)`;
+  }
   say(base + detail, 'error');
 };
 

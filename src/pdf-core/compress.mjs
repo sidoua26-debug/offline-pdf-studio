@@ -2,19 +2,18 @@ import { PDFDocument } from 'pdf-lib';
 import { enforceLimits, OPERATIONAL_LIMITS } from './limits.mjs';
 import { loadPdf } from './load.mjs';
 import { createError } from './errors.mjs';
+import { sanitizeMetadata } from './metadata.mjs';
 
 /**
  * Client-side rasterized compression for scanned/image-heavy PDFs.
  *
  * Each page is rendered at the chosen scale and re-encoded as a compressed JPEG
  * with the specified quality (0.1 to 1.0). The resulting pages are embedded into
- * a clean output PDF document.
+ * a clean output PDF document and sanitized so default pdf-lib metadata is not leaked.
  *
- * NOTE on pure client-side PDF compression:
- * Pure client-side JavaScript without large WASM binaries (e.g. Ghostscript, MuPDF, QPDF)
- * cannot safely re-compress arbitrary internal PDF stream objects or perform lossless font
- * subsetting. Rasterized JPEG re-encoding provides significant real size reduction (often 50-80%)
- * for scanned documents, photos, and high-DPI raster pages.
+ * If the output is not strictly smaller than the input (e.g. text-only or vector PDFs),
+ * the operation rejects with NOT_COMPRESSIBLE so the UI can honestly report that the file
+ * cannot be shrunk client-side without degrading quality for no gain.
  */
 export async function compressPdfByRasterization({
   pdfBuffer,
@@ -77,14 +76,22 @@ export async function compressPdfByRasterization({
     await renderPageToJpeg.release?.(pdfBuffer);
   }
 
-  const outputBytes = await target.save();
-  enforceLimits({ outputBytes: outputBytes.byteLength });
+  const rawBytes = await target.save();
+  const sanitizedBytes = await sanitizeMetadata(rawBytes);
+  enforceLimits({ outputBytes: sanitizedBytes.byteLength });
+
+  if (sanitizedBytes.byteLength >= pdfBuffer.byteLength) {
+    throw createError('NOT_COMPRESSIBLE', 'The compressed output is not smaller than the original PDF.', {
+      originalBytes: pdfBuffer.byteLength,
+      compressedBytes: sanitizedBytes.byteLength
+    });
+  }
 
   return {
-    bytes: outputBytes,
+    bytes: sanitizedBytes,
     originalBytes: pdfBuffer.byteLength,
-    compressedBytes: outputBytes.byteLength,
-    ratio: Number((outputBytes.byteLength / pdfBuffer.byteLength).toFixed(3)),
+    compressedBytes: sanitizedBytes.byteLength,
+    ratio: Number((sanitizedBytes.byteLength / pdfBuffer.byteLength).toFixed(3)),
     pageCount
   };
 }

@@ -85,8 +85,9 @@
         <p class="limitations">
           Pure client-side compression re-encodes pages to optimized JPEG images. This delivers dramatic size
           reduction (50–80%) for <strong>scanned documents and image-heavy PDFs</strong>.
-          <em>Note:</em> Vector text and outlines become rasterized. Pure vector/text PDFs without large images cannot
-          be meaningfully compressed without native server-side tools (like Ghostscript/QPDF) and will not shrink.
+          <em>Important:</em> Compression flattens pages into raster images: text becomes unsearchable and unselectable,
+          interactive forms, bookmarks, and links are lost, and screen-reader accessibility is reduced.
+          Pure vector/text PDFs without large images cannot be compressed client-side and will be refused if output size would increase.
         </p>
         <label>PDF <input type="file" id="compress-file" accept="application/pdf,.pdf" /></label>
         <fieldset>
