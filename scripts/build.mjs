@@ -31,11 +31,9 @@ async function bundle(outdir) {
 
   const pdfLibLicense = await readFile('node_modules/pdf-lib/LICENSE.md', 'utf8');
   const pdfJsLicense = await readFile(`${pdfjs}/LICENSE`, 'utf8');
-  const pngJsLicense = await readFile('node_modules/pngjs/LICENSE', 'utf8');
   const bundledLicenses = [
     '=== pdf-lib ===\n' + pdfLibLicense.trim(),
-    '=== pdfjs-dist ===\n' + pdfJsLicense.trim(),
-    '=== pngjs ===\n' + pngJsLicense.trim()
+    '=== pdfjs-dist ===\n' + pdfJsLicense.trim()
   ].join('\n\n') + '\n';
   await writeFile(`${outdir}/THIRD_PARTY_LICENSES.txt`, bundledLicenses);
 }
@@ -76,7 +74,7 @@ manifest.background = { ...restBackground, scripts: [worker] };
 manifest.browser_specific_settings = {
   gecko: {
     id: 'offline-pdf-studio@local', // replace with your own id before publishing to AMO
-    strict_min_version: '140.0',
+    strict_min_version: '142.0',
     data_collection_permissions: { required: ['none'] }
   }
 };
