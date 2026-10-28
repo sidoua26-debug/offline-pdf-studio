@@ -26,7 +26,7 @@ npx http-server dist/web   # or any static file server; do not open index.html v
   with `data_collection_permissions: none`, Firefox 140+). **Replace the placeholder add-on id in `scripts/build.mjs`
   with your own before submitting to AMO**, and run `npx web-ext lint -s dist/firefox` first. Test with
   `about:debugging` → Load Temporary Add-on.
-- Clicking the toolbar icon focuses the existing studio tab instead of opening another.
+- Clicking the toolbar icon focuses the existing studio tab instead of opening another. This is done statelessly via `chrome.runtime.sendMessage({type: 'studio-ping'})` without requiring `tabs` or host permissions (which would otherwise mask tab URLs and tab titles from `chrome.tabs.query`).
 - `npm run package` builds and writes store-ready zips (`dist/offline-pdf-studio-chrome-edge.zip`, `dist/offline-pdf-studio-firefox.zip`; needs the `zip` command).
 - `npm run report:predeploy` regenerates `PRE_DEPLOYMENT_REPORT.md`.
 
@@ -82,7 +82,7 @@ the tab closes. Store listing text: "Requests no permissions. All PDF processing
 
 | Where | Do this | Expect |
 | --- | --- | --- |
-| Chrome / Edge / Firefox | Click the toolbar icon repeatedly | One studio tab, re-focused each time |
+| Chrome / Edge / Firefox | Click the toolbar icon repeatedly (including after worker idle/restart) | One studio tab, re-focused each time (via stateless `studio-ping` response) |
 | Firefox 140+ | Load `dist/firefox` via `about:debugging` | Loads with no manifest errors |
 | Redaction | Open a 10-page PDF, click Next 5 times quickly | Lands on page 6, no console errors |
 | Redaction | Draw a box, press Ctrl/Cmd+Z | Box and list entry disappear, count drops |

@@ -1,34 +1,22 @@
-// Opens (or focuses) the single studio tab. Works with zero permissions
-// across Chrome/Edge service workers and Firefox event pages.
+// Opens (or focuses) the single studio tab statelessly.
+// Works across Chrome/Edge service workers and Firefox event pages without
+// storing mutable tab IDs in global state and without requiring tabs permissions.
 const studioUrl = chrome.runtime.getURL('studio.html');
-let studioTabId = null;
 
 chrome.action.onClicked.addListener(async () => {
-  if (studioTabId !== null) {
-    try {
-      const existing = await chrome.tabs.get(studioTabId);
-      if (existing?.id !== undefined) {
-        await chrome.tabs.update(existing.id, { active: true });
-        if (existing.windowId !== undefined) await chrome.windows.update(existing.windowId, { focused: true });
-        return;
-      }
-    } catch {
-      studioTabId = null;
-    }
-  }
-
   try {
-    const [existing] = await chrome.tabs.query({ url: studioUrl });
-    if (existing?.id !== undefined) {
-      studioTabId = existing.id;
-      await chrome.tabs.update(existing.id, { active: true });
-      if (existing.windowId !== undefined) await chrome.windows.update(existing.windowId, { focused: true });
+    const response = await chrome.runtime.sendMessage({ type: 'studio-ping' });
+    if (response?.tabId !== undefined) {
+      await chrome.tabs.update(response.tabId, { active: true });
+      if (response.windowId !== undefined) {
+        await chrome.windows.update(response.windowId, { focused: true });
+      }
       return;
     }
   } catch {
-    // Fall through and open a new tab if lookup fails
+    // Throws if no receiver exists (e.g., studio.html is not open).
+    // In that case, fall through and create a new studio tab.
   }
 
-  const tab = await chrome.tabs.create({ url: studioUrl });
-  studioTabId = tab.id ?? null;
+  await chrome.tabs.create({ url: studioUrl });
 });

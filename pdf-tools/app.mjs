@@ -366,3 +366,22 @@ for (const zone of document.querySelectorAll('fieldset, #panel-redact, #panel-co
     input.dispatchEvent(new Event('change'));
   });
 }
+
+// ---- Extension single-tab messaging: reply to studio-ping ----
+if (globalThis.chrome?.runtime?.onMessage) {
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type === 'studio-ping') {
+      if (globalThis.chrome?.tabs?.getCurrent) {
+        chrome.tabs.getCurrent().then((tab) => {
+          sendResponse({ tabId: tab?.id, windowId: tab?.windowId });
+        }).catch(() => {
+          sendResponse({});
+        });
+      } else {
+        sendResponse({});
+      }
+      return true; // Keep message channel open for async sendResponse
+    }
+    return false;
+  });
+}
