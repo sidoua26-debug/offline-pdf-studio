@@ -1,27 +1,42 @@
-# Cloudflare Pages Deployment Guide
+# Deployment Guide: extensionguy.me/pdf-tools/
 
 Target URL: `https://extensionguy.me/pdf-tools/`
 Build output: `dist/web/`
 
+The web demo is hosted as a subdirectory (`/pdf-tools/`) of the existing `extensionguy.me` portfolio site, which is git-connected to Cloudflare Pages.
+
 ---
 
-## 1. Deployment Command
+## 1. Staging the Build into the Portfolio Repository
 
-Run the following command from the repository root:
+1. Ensure the production web build is up-to-date:
+   ```bash
+   npm run build
+   ```
+2. Run the staging script to copy `dist/web/` into the `pdf-tools/` directory of your portfolio repository:
+   ```bash
+   node scripts/stageToPortfolio.mjs <path-to-portfolio-repo>
+   ```
+   *Example:*
+   ```bash
+   node scripts/stageToPortfolio.mjs ~/projects/extensionguy.me
+   ```
 
-```bash
-npx wrangler pages deploy dist/web --project-name=offline-pdf-studio
-```
-
-*(Note: Replace `offline-pdf-studio` with your specific Cloudflare Pages project name if different).*
-
-If deploying as a subdirectory or path prefix under `https://extensionguy.me/pdf-tools/`, configure the Cloudflare Pages custom route or root directory accordingly.
+3. Navigate to your portfolio repository, review the changes, commit, and push:
+   ```bash
+   cd <path-to-portfolio-repo>
+   git status
+   git add pdf-tools/
+   git commit -m "feat(pdf-tools): update offline pdf tools web demo"
+   git push origin main
+   ```
+   Cloudflare Pages will automatically deploy the commit to `https://extensionguy.me/pdf-tools/`.
 
 ---
 
 ## 2. Sitemap Entry (`sitemap.xml`)
 
-Add the following `<url>` block to the root `sitemap.xml` for `extensionguy.me`:
+Add the following `<url>` block to the root `sitemap.xml` in your `extensionguy.me` repository:
 
 ```xml
   <url>
@@ -72,8 +87,8 @@ Place in the footer navigation or links list of `https://extensionguy.me/`:
 - [ ] **Split Tool**: Load `sample.pdf`, enter `1-2`, click "Extract and download", confirm downloaded file contains 2 pages.
 - [ ] **Rotate Tool**: Load `sample.pdf`, select 90° clockwise on `*`, click "Rotate and download", confirm pages are rotated.
 - [ ] **Compress Tool**:
-  - Load `tests/fixtures/sample.pdf` (vector PDF) → verify it shows `NOT_COMPRESSIBLE` notice without downloading.
+  - Load `sample.pdf` (vector PDF) → verify it shows `NOT_COMPRESSIBLE` notice without downloading.
   - Load a scanned/photo PDF → verify compressed download succeeds, output file shrinks, and Producer metadata is cleared.
-- [ ] **Redaction Tool**: Load `tests/fixtures/secret.pdf`, draw a box over the secret token, click "Redact, verify and download", verify the token is destroyed, box is solid black, and unredacted pages are intact.
+- [ ] **Redaction Tool**: Load `secret.pdf`, draw a box over the secret token, click "Redact, verify and download", verify the token is destroyed, box is solid black, and unredacted pages are intact.
 - [ ] **Metadata Tool**: Load `sample.pdf`, click "Clear metadata and download", verify Info dictionary fields are empty.
 - [ ] **Lighthouse Pass**: Run Google Chrome Lighthouse audit (Performance, Accessibility, Best Practices, SEO) — verify scores $\ge$ 95 and zero security/accessibility errors.

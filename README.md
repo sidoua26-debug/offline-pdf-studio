@@ -1,5 +1,7 @@
 # Offline PDF Studio
 
+Source: https://github.com/sidoua26-debug/offline-pdf-studio
+
 Local-only PDF tools that run entirely in the browser: merge, split/extract, rotate, metadata clearing and
 region-based **Verified Destructive Redaction**. Nothing is uploaded; the app makes no network requests of its own and
 ships with a strict Content-Security-Policy.
