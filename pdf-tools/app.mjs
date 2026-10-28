@@ -88,6 +88,9 @@ tabs.forEach((item, i) => {
 // ---- Worker ----
 const worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
 const controller = new WorkerController(worker);
+if (typeof window !== 'undefined') {
+  window.__pdfStudio = { worker, controller };
+}
 
 // Runs a worker task while keeping buttons from being double-clicked.
 async function busy(button, label, task) {

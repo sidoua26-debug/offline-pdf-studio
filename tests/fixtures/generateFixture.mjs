@@ -30,3 +30,16 @@ nonLetter.drawText('Fixture Page 3 Square', { x: 72, y: 420, size: 18, font });
 const bytes = await pdf.save();
 await writeFile(outPath, bytes);
 console.log(`Generated fixture at ${outPath} (${bytes.byteLength} bytes)`);
+
+const secretPath = resolve('tests/fixtures/secret.pdf');
+const secretPdf = await PDFDocument.create();
+const sFont = await secretPdf.embedFont(StandardFonts.Helvetica);
+const sPage = secretPdf.addPage([600, 400]);
+sPage.drawText('CONFIDENTIAL_SECRET_TOKEN_xyz123', { x: 50, y: 320, size: 20, font: sFont, color: rgb(0, 0, 0) });
+sPage.drawText('This text is on unredacted page 2.', { x: 50, y: 200, size: 16, font: sFont });
+const sPage2 = secretPdf.addPage([600, 400]);
+sPage2.drawText('Second page safe text', { x: 50, y: 300, size: 16, font: sFont });
+const secretBytes = await secretPdf.save();
+await writeFile(secretPath, secretBytes);
+console.log(`Generated fixture at ${secretPath} (${secretBytes.byteLength} bytes)`);
+

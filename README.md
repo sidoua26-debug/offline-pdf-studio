@@ -7,6 +7,11 @@ ships with a strict Content-Security-Policy.
 ## Requirements
 
 - **Node.js**: Requires Node 22+ (specifically Node 22.2.0+ or Node 24+ LTS) for native `node:fs/promises` glob support.
+- **Browser Testing**: The Playwright UI smoke tests (`npm run test:ui`) run against Chromium. Install Playwright browser binaries with:
+  ```bash
+  npx playwright install chromium
+  ```
+  *Note for Extension Testing*: Chrome extension testing (`--load-extension`) requires a full desktop Chromium build (e.g. `chrome-linux64/chrome` or system Chrome/Chromium via `CHROMIUM_PATH`), not `chrome-headless-shell`, as headless-shell does not support extensions. If no browser is installed, the UI tests skip cleanly with an informational notice so `npm test` remains portable across minimal environments.
 - **Deployment**: Used by `extensionguy.me/pdf-tools/`.
 
 ## Build and run
