@@ -77,7 +77,7 @@ export async function compressPdfByRasterization({
   }
 
   const rawBytes = await target.save();
-  const sanitizedBytes = await sanitizeMetadata(rawBytes);
+  const sanitizedBytes = await sanitizeMetadata(rawBytes, { isOutput: true });
   enforceLimits({ outputBytes: sanitizedBytes.byteLength });
 
   if (sanitizedBytes.byteLength >= pdfBuffer.byteLength) {

@@ -15,8 +15,12 @@ export const METADATA_FEATURE_MATRIX = Object.freeze({
   ]
 });
 
-export async function inspectMetadata(pdfBuffer) {
-  enforceLimits({ inputBytes: pdfBuffer.byteLength });
+export async function inspectMetadata(pdfBuffer, { isOutput = false } = {}) {
+  if (isOutput) {
+    enforceLimits({ outputBytes: pdfBuffer.byteLength });
+  } else {
+    enforceLimits({ inputBytes: pdfBuffer.byteLength });
+  }
   const pdf = await loadPdf(pdfBuffer, { updateMetadata: false });
   const metadata = {
     title: pdf.getTitle() ?? null,
@@ -36,8 +40,12 @@ export async function inspectMetadata(pdfBuffer) {
   };
 }
 
-export async function sanitizeMetadata(pdfBuffer) {
-  enforceLimits({ inputBytes: pdfBuffer.byteLength });
+export async function sanitizeMetadata(pdfBuffer, { isOutput = false } = {}) {
+  if (isOutput) {
+    enforceLimits({ outputBytes: pdfBuffer.byteLength });
+  } else {
+    enforceLimits({ inputBytes: pdfBuffer.byteLength });
+  }
   const pdf = await loadPdf(pdfBuffer, { updateMetadata: false });
 
   pdf.setTitle('');

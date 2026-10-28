@@ -45,7 +45,7 @@ export async function verifyRedactionOutput({ pdfBytes, redactedPages, expectedS
     }
   }
 
-  const metadataInfo = await inspectMetadata(pdfBytes);
+  const metadataInfo = await inspectMetadata(pdfBytes, { isOutput: true });
   if (expectedSanitizedMetadata) {
     const values = Object.entries(metadataInfo.metadata).filter(([key]) => key !== 'pageCount').map(([, v]) => v);
     const hasUnexpected = values.some((value) => value && value !== '1970-01-01T00:00:00.000Z');

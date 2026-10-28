@@ -85,7 +85,7 @@ export async function redactByRasterizedRebuild({
   }
 
   const rebuiltBytes = await target.save();
-  const sanitized = await sanitizeMetadata(rebuiltBytes);
+  const sanitized = await sanitizeMetadata(rebuiltBytes, { isOutput: true });
 
   let verification;
   try {
