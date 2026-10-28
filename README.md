@@ -28,7 +28,7 @@ npx http-server dist/web   # or any static file server; do not open index.html v
   permissions, background service worker). Load it via `chrome://extensions` → Developer mode → Load unpacked, or zip
   the folder for the Chrome Web Store / Edge Add-ons.
 - `dist/firefox/` is the same code with a Firefox manifest (`background.scripts` event page, `browser_specific_settings.gecko`
-  with `data_collection_permissions: none`, Firefox 140+). **Replace the placeholder add-on id in `scripts/build.mjs`
+  with `data_collection_permissions: none`, Firefox 142+). **Replace the placeholder add-on id in `scripts/build.mjs`
   with your own before submitting to AMO**, and run `npx web-ext lint -s dist/firefox` first. Test with
   `about:debugging` → Load Temporary Add-on.
 - Clicking the toolbar icon focuses the existing studio tab instead of opening another. This is done statelessly via `chrome.runtime.sendMessage({type: 'studio-ping'})` without requiring `tabs` or host permissions (which would otherwise mask tab URLs and tab titles from `chrome.tabs.query`).
@@ -88,11 +88,13 @@ the tab closes. Store listing text: "Requests no permissions. All PDF processing
 | Where | Do this | Expect |
 | --- | --- | --- |
 | Chrome / Edge / Firefox | Click the toolbar icon repeatedly (including after worker idle/restart) | One studio tab, re-focused each time (via stateless `studio-ping` response) |
-| Firefox 140+ | Load `dist/firefox` via `about:debugging` | Loads with no manifest errors |
+| Firefox 142+ | Load `dist/firefox` via `about:debugging` | Loads with no manifest errors |
 | Redaction | Open a 10-page PDF, click Next 5 times quickly | Lands on page 6, no console errors |
 | Redaction | Draw a box, press Ctrl/Cmd+Z | Box and list entry disappear, count drops |
 | Redaction | Redact a sample, open the output | Boxes black, no selectable text on those pages, other pages intact |
 | Redaction | Add a box using the X/Y/Width/Height fields only (keyboard) | Box appears with a number badge |
+| Compress | Load text-only PDF | Refused with NOT_COMPRESSIBLE notice (no file size increase) |
+| Compress | Load scanned/image-heavy PDF | Shrunk output downloaded, metadata sanitized |
 | Split | Load a file, cancel, pick the same file again | Page count shows again |
 | Rotate | Rotate an already-rotated page 90° clockwise twice | Page turns each time |
 | Any panel | Drag a PDF onto the panel | Same as using the file picker |

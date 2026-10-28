@@ -82,8 +82,9 @@ ${commandResults.map((r) => `- \`${r.cmd}\`: ${r.ok ? 'PASS' : 'FAIL'}`).join('\
 ${bundleSizes}
 
 ## Known limitations
-- The browser UI (drag-to-box viewer, file pickers, downloads) has no automated browser test; it is covered only by build, wiring checks and a run of the built worker bundle. Smoke-test it manually in Chrome, Firefox and Safari before release.
+- The browser UI is covered by automated Playwright smoke tests (tests/ui/smoke.test.mjs) under Chromium. Multi-browser parity (Firefox and Safari/WebKit engines) and real desktop extension runtimes should be smoke-tested manually before release.
 - Rendering is tested with node-canvas; browser canvases may antialias slightly differently (boxes are expanded to whole pixels and re-verified in the browser at run time).
+- Compression uses pure client-side rasterized JPEG encoding; it is highly effective (50-80% reduction) for scanned/image-heavy documents, but text-only/vector PDFs are refused with NOT_COMPRESSIBLE since client-side tools cannot re-compress vector streams.
 - Metadata sanitization currently targets known Info dictionary fields; unsupported structures are documented.
 
 ## Git status
@@ -95,6 +96,9 @@ ${gitStatus.ok ? gitStatus.stdout || '(clean)' : '(not a git repository)'}
 await writeFile('PRE_DEPLOYMENT_REPORT.md', report, 'utf8');
 
 if (commandResults.some((r) => !r.ok)) {
+  for (const failed of commandResults.filter((r) => !r.ok)) {
+    console.error(`FAILED: ${failed.cmd}\n${failed.stderr || failed.stdout}`);
+  }
   console.error('One or more checks failed. PRE_DEPLOYMENT_REPORT.md was still generated.');
   process.exit(1);
 }
