@@ -1,0 +1,32 @@
+{
+  "name": "offline-pdf-studio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Offline PDF Studio shared core, web demo, and MV3 scaffold",
+  "scripts": {
+    "generate:fixtures": "node tests/fixtures/generateFixture.mjs",
+    "test:unit": "node --test tests/unit/*.test.mjs",
+    "test:integration": "node --test tests/integration/*.test.mjs tests/mv3/*.test.mjs",
+    "test:static": "node tests/static/forbidden-network-scan.mjs",
+    "test:dist": "node --test tests/dist/*.test.mjs",
+    "test:ui": "node --test tests/ui/*.test.mjs",
+    "test": "npm run generate:fixtures && npm run test:unit && npm run test:integration && npm run test:static && npm run build && npm run test:dist && npm run test:ui",
+    "report:predeploy": "node scripts/generate-predeployment-report.mjs",
+    "build": "node scripts/build.mjs",
+    "package": "npm run build && node scripts/package.mjs"
+  },
+  "dependencies": {
+    "pdf-lib": "1.17.1",
+    "pdfjs-dist": "4.6.82",
+    "pngjs": "7.0.0"
+  },
+  "devDependencies": {
+    "canvas": "3.2.3",
+    "esbuild": "0.28.2",
+    "playwright": "^1.64.1"
+  },
+  "overrides": {
+    "canvas": "3.2.3"
+  }
+}
