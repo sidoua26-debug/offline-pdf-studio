@@ -14,7 +14,7 @@ ships with a strict Content-Security-Policy.
   npx playwright install chromium
   ```
   *Note for Extension Testing*: Chrome extension testing (`--load-extension`) requires a full desktop Chromium build (e.g. `chrome-linux64/chrome` or system Chrome/Chromium via `CHROMIUM_PATH`), not `chrome-headless-shell`, as headless-shell does not support extensions. If no browser is installed, the UI tests skip cleanly with an informational notice so `npm test` remains portable across minimal environments.
-- **Deployment**: Used by `extensionguy.me/pdf-tools/`.
+- **Deployment**: Intended hosting target is `https://extensionguy.me/pdf-tools/` (staged via `scripts/stageToPortfolio.mjs`).
 
 ## Build and run
 
@@ -25,7 +25,7 @@ npm run build         # outputs dist/web and dist/extension
 npx http-server dist/web   # or any static file server; do not open index.html via file://
 ```
 
-- `dist/web/` is a static site. Host it on any static host over HTTPS (needs correct `.mjs`/`.js` MIME types). Deployed at `extensionguy.me/pdf-tools/`.
+- `dist/web/` is a static site. Host it on any static host over HTTPS (needs correct `.mjs`/`.js` MIME types). Prepared for integration at `https://extensionguy.me/pdf-tools/`.
 - `dist/extension/` is the Chrome and Edge build: an unpacked Manifest V3 extension (zero permissions, zero host
   permissions, background service worker). Load it via `chrome://extensions` → Developer mode → Load unpacked, or zip
   the folder for the Chrome Web Store / Edge Add-ons.

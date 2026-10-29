@@ -40,6 +40,22 @@ test('compressPdfByRasterization compresses image-heavy PDF, shrinks size, and s
   assert.equal(metadata.creator, '');
   assert.equal(metadata.creationDate, '1970-01-01T00:00:00.000Z');
   assert.equal(metadata.modificationDate, '1970-01-01T00:00:00.000Z');
+
+  // Verify the serialized byte stream independently via pdfjs-dist without pdf-lib mutation
+  const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const pdfjsTask = getDocument({ data: new Uint8Array(result.bytes), isEvalSupported: false });
+  const pdfjsDoc = await pdfjsTask.promise;
+  const pdfjsMeta = await pdfjsDoc.getMetadata();
+  await pdfjsTask.destroy();
+  assert.equal(pdfjsMeta.info.Title, '', 'Serialized Title must be empty string');
+  assert.equal(pdfjsMeta.info.Author, '', 'Serialized Author must be empty string');
+  assert.equal(pdfjsMeta.info.Creator, '', 'Serialized Creator must be empty string');
+  assert.equal(pdfjsMeta.info.Producer, '', 'Serialized Producer must be empty string');
+
+  // Verify raw serialized bytes do not leak the pdf-lib attribution string
+  const rawLatin1 = Buffer.from(result.bytes).toString('latin1');
+  assert.ok(!rawLatin1.includes('Hopding'), 'Raw serialized bytes must not contain Hopding');
+  assert.ok(!rawLatin1.includes('pdf-lib (https'), 'Raw serialized bytes must not contain pdf-lib attribution');
 });
 
 test('compressPdfByRasterization refuses text-only PDF with NOT_COMPRESSIBLE', async () => {
