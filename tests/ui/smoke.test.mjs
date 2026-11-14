@@ -259,6 +259,7 @@ test('UI Smoke: split tool cancel-then-repick same file', async (t) => {
 
   try {
     await page.goto(url);
+    await page.locator('#split-pages').fill('1');
     const splitInput = page.locator('#split-file');
 
     // 1. Pick file
@@ -294,6 +295,7 @@ test('UI Smoke: worker crash displays WORKER_CRASHED message and re-enables butt
 
   try {
     await page.goto(url);
+    await page.locator('#split-pages').fill('1');
     await page.locator('#split-file').setInputFiles(fixturePath);
     await page.waitForFunction(() => document.getElementById('split-run').disabled === false);
 

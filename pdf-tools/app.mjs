@@ -4,7 +4,8 @@ import {
   redactByRasterizedRebuild,
   compressPdfByRasterization,
   OPERATIONAL_LIMITS,
-  METADATA_FEATURE_MATRIX
+  METADATA_FEATURE_MATRIX,
+  validatePageSelection
 } from '../src/pdf-core/index.mjs';
 import { createBrowserRenderer } from './browserRenderer.mjs';
 import { RedactViewer } from './redactViewer.mjs';
@@ -101,7 +102,7 @@ if (typeof window !== 'undefined') {
 }
 
 // Runs a worker task while keeping buttons from being double-clicked.
-async function busy(button, label, task) {
+async function busy(button, label, task, onFinally) {
   button.disabled = true;
   say(label);
   try {
@@ -109,7 +110,11 @@ async function busy(button, label, task) {
   } catch (error) {
     fail(error);
   } finally {
-    button.disabled = false;
+    if (onFinally) {
+      onFinally();
+    } else {
+      button.disabled = false;
+    }
   }
 }
 const sendBuffers = (arrays) => arrays.map((a) => a.slice().buffer);
@@ -160,45 +165,144 @@ $('merge-run').addEventListener('click', () =>
 
 // ---- Single-file tools (split, rotate, metadata) ----
 function bindSingle({ input, button, onLoaded }) {
-  const state = { file: null, bytes: null };
+  const state = { file: null, bytes: null, pageCount: 0, busy: false, ready: false };
+  let currentGeneration = 0;
+
   $(input).addEventListener('change', async (event) => {
+    const generation = ++currentGeneration;
     state.file = event.target.files[0] ?? null;
     event.target.value = ''; // lets the same file be picked again after an error or edit
+    state.ready = false;
     state.bytes = null;
+    state.pageCount = 0;
     $(button).disabled = true;
-    if (!state.file) return;
+    try { onLoaded?.(null); } catch (e) { console.error(e); }
+    if (!state.file) {
+      return;
+    }
     try {
-      state.bytes = await readPdf(state.file);
-      const buf = state.bytes.slice().buffer;
+      const pickedFile = state.file;
+      const bytes = await readPdf(pickedFile);
+      if (generation !== currentGeneration) return;
+      const buf = bytes.slice().buffer;
       const info = await controller.request('inspect', { file: buf }, { transfer: [buf] });
-      say(`${state.file.name}: ${info.metadata.pageCount} page(s).`);
-      $(button).disabled = false;
-      onLoaded?.(info);
-    } catch (error) { state.bytes = null; fail(error); }
+      if (generation !== currentGeneration) return;
+      state.bytes = bytes;
+      state.pageCount = info.metadata.pageCount;
+      state.ready = true;
+      say(`${pickedFile.name}: ${info.metadata.pageCount} page(s).`);
+      if (onLoaded) {
+        onLoaded(info);
+      } else {
+        $(button).disabled = false;
+      }
+    } catch (error) {
+      if (generation !== currentGeneration) return;
+      state.ready = false;
+      state.bytes = null;
+      state.pageCount = 0;
+      $(button).disabled = true;
+      try { onLoaded?.(null); } catch (e) { console.error(e); }
+      fail(error);
+    }
   });
   return state;
 }
 
-const split = bindSingle({ input: 'split-file', button: 'split-run' });
-$('split-run').addEventListener('click', () =>
+function updateSplitButton() {
+  const btn = $('split-run');
+  if (split.busy || !split.ready || !split.bytes || !split.pageCount) {
+    btn.disabled = true;
+    return;
+  }
+  const val = $('split-pages').value.trim();
+  if (!val) {
+    btn.disabled = true;
+    return;
+  }
+  const check = validatePageSelection(val, split.pageCount);
+  btn.disabled = !check.valid;
+}
+
+const split = bindSingle({
+  input: 'split-file',
+  button: 'split-run',
+  onLoaded: () => {
+    updateSplitButton();
+  }
+});
+$('split-pages').addEventListener('input', updateSplitButton);
+
+$('split-run').addEventListener('click', () => {
+  if (split.busy || !split.ready || !split.bytes || !split.pageCount) return;
+  const val = $('split-pages').value.trim();
+  if (!val || !validatePageSelection(val, split.pageCount).valid) return;
+  split.busy = true;
+  $('split-run').setAttribute('aria-busy', 'true');
+  updateSplitButton();
+  window.dispatchEvent(new CustomEvent('pdfstudio:busychange', { detail: { tool: 'split', busy: true } }));
+  const currentFile = split.file;
   busy($('split-run'), 'Extracting…', async () => {
     const buf = split.bytes.slice().buffer;
     const { bytes } = await controller.request('split', { file: buf, selection: $('split-pages').value }, { transfer: [buf] });
-    download(bytes, `${baseName(split.file)}-extract.pdf`);
+    download(bytes, `${baseName(currentFile)}-extract.pdf`);
     say('Extracted pages downloaded.', 'ok');
-  }));
+  }, () => {
+    split.busy = false;
+    $('split-run').removeAttribute('aria-busy');
+    updateSplitButton();
+    window.dispatchEvent(new CustomEvent('pdfstudio:busychange', { detail: { tool: 'split', busy: false } }));
+  });
+});
 
-const rotate = bindSingle({ input: 'rotate-file', button: 'rotate-run' });
-$('rotate-run').addEventListener('click', () =>
+function updateRotateButton() {
+  const btn = $('rotate-run');
+  if (rotate.busy || !rotate.ready || !rotate.bytes || !rotate.pageCount) {
+    btn.disabled = true;
+    return;
+  }
+  const val = $('rotate-pages').value.trim();
+  if (!val) {
+    btn.disabled = true;
+    return;
+  }
+  const check = validatePageSelection(val, rotate.pageCount);
+  btn.disabled = !check.valid;
+}
+
+const rotate = bindSingle({
+  input: 'rotate-file',
+  button: 'rotate-run',
+  onLoaded: () => {
+    updateRotateButton();
+  }
+});
+$('rotate-pages').addEventListener('input', updateRotateButton);
+
+$('rotate-run').addEventListener('click', () => {
+  if (rotate.busy || !rotate.ready || !rotate.bytes || !rotate.pageCount) return;
+  const val = $('rotate-pages').value.trim();
+  if (!val || !validatePageSelection(val, rotate.pageCount).valid) return;
+  rotate.busy = true;
+  $('rotate-run').setAttribute('aria-busy', 'true');
+  updateRotateButton();
+  window.dispatchEvent(new CustomEvent('pdfstudio:busychange', { detail: { tool: 'rotate', busy: true } }));
+  const currentFile = rotate.file;
   busy($('rotate-run'), 'Rotating…', async () => {
     const buf = rotate.bytes.slice().buffer;
     const degrees = $('rotate-degrees').value;
     // "Reset" sets an absolute 0°; every other choice turns the page from where it is now.
     const requests = [{ pages: $('rotate-pages').value, degrees: degrees === 'reset' ? 0 : degrees, relative: degrees !== 'reset' }];
     const { bytes } = await controller.request('rotate', { file: buf, requests }, { transfer: [buf] });
-    download(bytes, `${baseName(rotate.file)}-rotated.pdf`);
+    download(bytes, `${baseName(currentFile)}-rotated.pdf`);
     say('Rotated PDF downloaded.', 'ok');
-  }));
+  }, () => {
+    rotate.busy = false;
+    $('rotate-run').removeAttribute('aria-busy');
+    updateRotateButton();
+    window.dispatchEvent(new CustomEvent('pdfstudio:busychange', { detail: { tool: 'rotate', busy: false } }));
+  });
+});
 
 // ---- Metadata ----
 const fillList = (id, items) => $(id).replaceChildren(...items.map((text) => Object.assign(document.createElement('li'), { textContent: text })));
@@ -207,35 +311,52 @@ fillList('meta-unsupported', METADATA_FEATURE_MATRIX.unsupported);
 const meta = bindSingle({
   input: 'meta-file',
   button: 'meta-run',
-  onLoaded: ({ metadata }) => {
+  onLoaded: (info) => {
     const body = $('meta-table').tBodies[0];
     body.replaceChildren();
-    for (const [key, value] of Object.entries(metadata)) {
+    if (!info?.metadata) {
+      $('meta-table').hidden = true;
+      $('meta-run').disabled = true;
+      return;
+    }
+    for (const [key, value] of Object.entries(info.metadata)) {
       const tr = body.insertRow();
       tr.insertCell().textContent = key;
       tr.insertCell().textContent = value === null || value === '' ? '(empty)' : String(value);
     }
     $('meta-table').hidden = false;
+    $('meta-run').disabled = false;
   }
 });
-$('meta-run').addEventListener('click', () =>
+$('meta-run').addEventListener('click', () => {
+  const currentFile = meta.file;
   busy($('meta-run'), 'Clearing metadata…', async () => {
     const buf = meta.bytes.slice().buffer;
     const { bytes } = await controller.request('sanitize', { file: buf }, { transfer: [buf] });
-    download(bytes, `${baseName(meta.file)}-clean.pdf`);
+    download(bytes, `${baseName(currentFile)}-clean.pdf`);
     say('Cleaned PDF downloaded. Only the Info dictionary was cleared; see "What is and isn\'t cleaned".', 'ok');
-  }));
+  }, () => {
+    $('meta-run').disabled = !meta.ready || !meta.bytes;
+  });
+});
 
 // ---- Compress ----
 const compress = bindSingle({
   input: 'compress-file',
   button: 'compress-run',
-  onLoaded: ({ metadata }) => {
+  onLoaded: (info) => {
+    if (!info?.metadata || !compress.bytes || !compress.file) {
+      $('compress-summary').textContent = 'No file selected.';
+      $('compress-run').disabled = true;
+      return;
+    }
     const kb = (compress.bytes.byteLength / 1024).toFixed(0);
-    $('compress-summary').textContent = `${compress.file.name}: ${metadata.pageCount} page(s), ${kb} KB. Ready to compress.`;
+    $('compress-summary').textContent = `${compress.file.name}: ${info.metadata.pageCount} page(s), ${kb} KB. Ready to compress.`;
+    $('compress-run').disabled = false;
   }
 });
-$('compress-run').addEventListener('click', () =>
+$('compress-run').addEventListener('click', () => {
+  const currentFile = compress.file;
   busy($('compress-run'), 'Compressing…', async () => {
     const quality = Number($('compress-quality').value);
     const scale = Number($('compress-scale').value);
@@ -251,12 +372,15 @@ $('compress-run').addEventListener('click', () =>
       const origKb = (result.originalBytes / 1024).toFixed(0);
       const compKb = (result.compressedBytes / 1024).toFixed(0);
       const pct = ((1 - result.ratio) * 100).toFixed(0);
-      download(result.bytes, `${baseName(compress.file)}-compressed.pdf`);
+      download(result.bytes, `${baseName(currentFile)}-compressed.pdf`);
       say(`Compressed PDF downloaded: ${origKb} KB → ${compKb} KB (${pct}% reduction).`, 'ok');
     } finally {
       await renderer.close();
     }
-  }));
+  }, () => {
+    $('compress-run').disabled = !compress.ready || !compress.bytes;
+  });
+});
 
 // ---- Redaction ----
 let redactSource = null;
@@ -354,6 +478,8 @@ $('redact-run').addEventListener('click', () =>
     } finally {
       await renderer.close();
     }
+  }, () => {
+    refreshRedactUi();
   }));
 
 refreshRedactUi();
