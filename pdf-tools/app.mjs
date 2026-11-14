@@ -102,7 +102,7 @@ if (typeof window !== 'undefined') {
 }
 
 // Runs a worker task while keeping buttons from being double-clicked.
-async function busy(button, label, task) {
+async function busy(button, label, task, onFinally) {
   button.disabled = true;
   say(label);
   try {
@@ -110,7 +110,11 @@ async function busy(button, label, task) {
   } catch (error) {
     fail(error);
   } finally {
-    button.disabled = false;
+    if (onFinally) {
+      onFinally();
+    } else {
+      button.disabled = false;
+    }
   }
 }
 const sendBuffers = (arrays) => arrays.map((a) => a.slice().buffer);
@@ -161,7 +165,7 @@ $('merge-run').addEventListener('click', () =>
 
 // ---- Single-file tools (split, rotate, metadata) ----
 function bindSingle({ input, button, onLoaded }) {
-  const state = { file: null, bytes: null, pageCount: 0 };
+  const state = { file: null, bytes: null, pageCount: 0, busy: false };
   $(input).addEventListener('change', async (event) => {
     state.file = event.target.files[0] ?? null;
     event.target.value = ''; // lets the same file be picked again after an error or edit
@@ -169,7 +173,7 @@ function bindSingle({ input, button, onLoaded }) {
     state.pageCount = 0;
     $(button).disabled = true;
     if (!state.file) {
-      onLoaded?.(null);
+      try { onLoaded?.(null); } catch (e) { console.error(e); }
       return;
     }
     try {
@@ -180,66 +184,93 @@ function bindSingle({ input, button, onLoaded }) {
       say(`${state.file.name}: ${info.metadata.pageCount} page(s).`);
       $(button).disabled = false;
       onLoaded?.(info);
-    } catch (error) { state.bytes = null; state.pageCount = 0; onLoaded?.(null); fail(error); }
+    } catch (error) {
+      state.bytes = null;
+      state.pageCount = 0;
+      try { onLoaded?.(null); } catch (e) { console.error(e); }
+      fail(error);
+    }
   });
   return state;
 }
 
 function updateSplitButton() {
-  if (!split.bytes || !split.pageCount) {
-    $('split-run').disabled = true;
+  const btn = $('split-run');
+  if (split.busy || !split.bytes || !split.pageCount) {
+    btn.disabled = true;
     return;
   }
   const val = $('split-pages').value.trim();
-  if (val) {
-    const check = validatePageSelection(val, split.pageCount);
-    $('split-run').disabled = !check.valid;
-  } else {
-    $('split-run').disabled = false;
+  if (!val) {
+    btn.disabled = true;
+    return;
   }
+  const check = validatePageSelection(val, split.pageCount);
+  btn.disabled = !check.valid;
 }
 
 const split = bindSingle({
   input: 'split-file',
   button: 'split-run',
-  onLoaded: (info) => {
-    if (info) updateSplitButton();
+  onLoaded: () => {
+    updateSplitButton();
   }
 });
 $('split-pages').addEventListener('input', updateSplitButton);
 
-$('split-run').addEventListener('click', () =>
+$('split-run').addEventListener('click', () => {
+  if (split.busy || !split.bytes || !split.pageCount) return;
+  const val = $('split-pages').value.trim();
+  if (!val || !validatePageSelection(val, split.pageCount).valid) return;
+  split.busy = true;
+  $('split-run').setAttribute('aria-busy', 'true');
+  updateSplitButton();
+  window.dispatchEvent(new CustomEvent('pdfstudio:busychange', { detail: { tool: 'split', busy: true } }));
   busy($('split-run'), 'Extracting…', async () => {
     const buf = split.bytes.slice().buffer;
     const { bytes } = await controller.request('split', { file: buf, selection: $('split-pages').value }, { transfer: [buf] });
     download(bytes, `${baseName(split.file)}-extract.pdf`);
     say('Extracted pages downloaded.', 'ok');
-  }));
+  }, () => {
+    split.busy = false;
+    $('split-run').removeAttribute('aria-busy');
+    updateSplitButton();
+    window.dispatchEvent(new CustomEvent('pdfstudio:busychange', { detail: { tool: 'split', busy: false } }));
+  });
+});
 
 function updateRotateButton() {
-  if (!rotate.bytes || !rotate.pageCount) {
-    $('rotate-run').disabled = true;
+  const btn = $('rotate-run');
+  if (rotate.busy || !rotate.bytes || !rotate.pageCount) {
+    btn.disabled = true;
     return;
   }
   const val = $('rotate-pages').value.trim();
-  if (val) {
-    const check = validatePageSelection(val, rotate.pageCount);
-    $('rotate-run').disabled = !check.valid;
-  } else {
-    $('rotate-run').disabled = false;
+  if (!val) {
+    btn.disabled = true;
+    return;
   }
+  const check = validatePageSelection(val, rotate.pageCount);
+  btn.disabled = !check.valid;
 }
 
 const rotate = bindSingle({
   input: 'rotate-file',
   button: 'rotate-run',
-  onLoaded: (info) => {
-    if (info) updateRotateButton();
+  onLoaded: () => {
+    updateRotateButton();
   }
 });
 $('rotate-pages').addEventListener('input', updateRotateButton);
 
-$('rotate-run').addEventListener('click', () =>
+$('rotate-run').addEventListener('click', () => {
+  if (rotate.busy || !rotate.bytes || !rotate.pageCount) return;
+  const val = $('rotate-pages').value.trim();
+  if (!val || !validatePageSelection(val, rotate.pageCount).valid) return;
+  rotate.busy = true;
+  $('rotate-run').setAttribute('aria-busy', 'true');
+  updateRotateButton();
+  window.dispatchEvent(new CustomEvent('pdfstudio:busychange', { detail: { tool: 'rotate', busy: true } }));
   busy($('rotate-run'), 'Rotating…', async () => {
     const buf = rotate.bytes.slice().buffer;
     const degrees = $('rotate-degrees').value;
@@ -248,7 +279,13 @@ $('rotate-run').addEventListener('click', () =>
     const { bytes } = await controller.request('rotate', { file: buf, requests }, { transfer: [buf] });
     download(bytes, `${baseName(rotate.file)}-rotated.pdf`);
     say('Rotated PDF downloaded.', 'ok');
-  }));
+  }, () => {
+    rotate.busy = false;
+    $('rotate-run').removeAttribute('aria-busy');
+    updateRotateButton();
+    window.dispatchEvent(new CustomEvent('pdfstudio:busychange', { detail: { tool: 'rotate', busy: false } }));
+  });
+});
 
 // ---- Metadata ----
 const fillList = (id, items) => $(id).replaceChildren(...items.map((text) => Object.assign(document.createElement('li'), { textContent: text })));
@@ -257,10 +294,15 @@ fillList('meta-unsupported', METADATA_FEATURE_MATRIX.unsupported);
 const meta = bindSingle({
   input: 'meta-file',
   button: 'meta-run',
-  onLoaded: ({ metadata }) => {
+  onLoaded: (info) => {
     const body = $('meta-table').tBodies[0];
     body.replaceChildren();
-    for (const [key, value] of Object.entries(metadata)) {
+    if (!info?.metadata) {
+      $('meta-table').hidden = true;
+      $('meta-run').disabled = true;
+      return;
+    }
+    for (const [key, value] of Object.entries(info.metadata)) {
       const tr = body.insertRow();
       tr.insertCell().textContent = key;
       tr.insertCell().textContent = value === null || value === '' ? '(empty)' : String(value);
@@ -274,15 +316,22 @@ $('meta-run').addEventListener('click', () =>
     const { bytes } = await controller.request('sanitize', { file: buf }, { transfer: [buf] });
     download(bytes, `${baseName(meta.file)}-clean.pdf`);
     say('Cleaned PDF downloaded. Only the Info dictionary was cleared; see "What is and isn\'t cleaned".', 'ok');
+  }, () => {
+    $('meta-run').disabled = !meta.bytes;
   }));
 
 // ---- Compress ----
 const compress = bindSingle({
   input: 'compress-file',
   button: 'compress-run',
-  onLoaded: ({ metadata }) => {
+  onLoaded: (info) => {
+    if (!info?.metadata || !compress.bytes || !compress.file) {
+      $('compress-summary').textContent = 'No file selected.';
+      $('compress-run').disabled = true;
+      return;
+    }
     const kb = (compress.bytes.byteLength / 1024).toFixed(0);
-    $('compress-summary').textContent = `${compress.file.name}: ${metadata.pageCount} page(s), ${kb} KB. Ready to compress.`;
+    $('compress-summary').textContent = `${compress.file.name}: ${info.metadata.pageCount} page(s), ${kb} KB. Ready to compress.`;
   }
 });
 $('compress-run').addEventListener('click', () =>
@@ -306,6 +355,8 @@ $('compress-run').addEventListener('click', () =>
     } finally {
       await renderer.close();
     }
+  }, () => {
+    $('compress-run').disabled = !compress.bytes;
   }));
 
 // ---- Redaction ----
@@ -404,6 +455,8 @@ $('redact-run').addEventListener('click', () =>
     } finally {
       await renderer.close();
     }
+  }, () => {
+    refreshRedactUi();
   }));
 
 refreshRedactUi();
