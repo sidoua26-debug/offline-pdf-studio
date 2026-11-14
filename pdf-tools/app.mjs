@@ -4,7 +4,8 @@ import {
   redactByRasterizedRebuild,
   compressPdfByRasterization,
   OPERATIONAL_LIMITS,
-  METADATA_FEATURE_MATRIX
+  METADATA_FEATURE_MATRIX,
+  validatePageSelection
 } from '../src/pdf-core/index.mjs';
 import { createBrowserRenderer } from './browserRenderer.mjs';
 import { RedactViewer } from './redactViewer.mjs';
@@ -160,26 +161,53 @@ $('merge-run').addEventListener('click', () =>
 
 // ---- Single-file tools (split, rotate, metadata) ----
 function bindSingle({ input, button, onLoaded }) {
-  const state = { file: null, bytes: null };
+  const state = { file: null, bytes: null, pageCount: 0 };
   $(input).addEventListener('change', async (event) => {
     state.file = event.target.files[0] ?? null;
     event.target.value = ''; // lets the same file be picked again after an error or edit
     state.bytes = null;
+    state.pageCount = 0;
     $(button).disabled = true;
-    if (!state.file) return;
+    if (!state.file) {
+      onLoaded?.(null);
+      return;
+    }
     try {
       state.bytes = await readPdf(state.file);
       const buf = state.bytes.slice().buffer;
       const info = await controller.request('inspect', { file: buf }, { transfer: [buf] });
+      state.pageCount = info.metadata.pageCount;
       say(`${state.file.name}: ${info.metadata.pageCount} page(s).`);
       $(button).disabled = false;
       onLoaded?.(info);
-    } catch (error) { state.bytes = null; fail(error); }
+    } catch (error) { state.bytes = null; state.pageCount = 0; onLoaded?.(null); fail(error); }
   });
   return state;
 }
 
-const split = bindSingle({ input: 'split-file', button: 'split-run' });
+function updateSplitButton() {
+  if (!split.bytes || !split.pageCount) {
+    $('split-run').disabled = true;
+    return;
+  }
+  const val = $('split-pages').value.trim();
+  if (val) {
+    const check = validatePageSelection(val, split.pageCount);
+    $('split-run').disabled = !check.valid;
+  } else {
+    $('split-run').disabled = false;
+  }
+}
+
+const split = bindSingle({
+  input: 'split-file',
+  button: 'split-run',
+  onLoaded: (info) => {
+    if (info) updateSplitButton();
+  }
+});
+$('split-pages').addEventListener('input', updateSplitButton);
+
 $('split-run').addEventListener('click', () =>
   busy($('split-run'), 'Extracting…', async () => {
     const buf = split.bytes.slice().buffer;
@@ -188,7 +216,29 @@ $('split-run').addEventListener('click', () =>
     say('Extracted pages downloaded.', 'ok');
   }));
 
-const rotate = bindSingle({ input: 'rotate-file', button: 'rotate-run' });
+function updateRotateButton() {
+  if (!rotate.bytes || !rotate.pageCount) {
+    $('rotate-run').disabled = true;
+    return;
+  }
+  const val = $('rotate-pages').value.trim();
+  if (val) {
+    const check = validatePageSelection(val, rotate.pageCount);
+    $('rotate-run').disabled = !check.valid;
+  } else {
+    $('rotate-run').disabled = false;
+  }
+}
+
+const rotate = bindSingle({
+  input: 'rotate-file',
+  button: 'rotate-run',
+  onLoaded: (info) => {
+    if (info) updateRotateButton();
+  }
+});
+$('rotate-pages').addEventListener('input', updateRotateButton);
+
 $('rotate-run').addEventListener('click', () =>
   busy($('rotate-run'), 'Rotating…', async () => {
     const buf = rotate.bytes.slice().buffer;

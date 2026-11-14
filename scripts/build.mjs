@@ -9,7 +9,11 @@ await rm('dist', { recursive: true, force: true });
 
 async function bundle(outdir) {
   await build({
-    entryPoints: { app: 'pdf-tools/app.mjs', worker: 'pdf-tools/worker.mjs' },
+    entryPoints: {
+      app: 'pdf-tools/app.mjs',
+      worker: 'pdf-tools/worker.mjs',
+      pageRanges: 'src/pdf-core/pageRanges.mjs'
+    },
     outdir,
     bundle: true,
     format: 'esm',

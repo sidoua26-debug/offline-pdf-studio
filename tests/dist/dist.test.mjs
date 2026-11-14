@@ -10,7 +10,9 @@ const targets = ['dist/web', 'dist/extension', 'dist/firefox'];
 test('both targets contain every runtime file the app needs', async () => {
   for (const dir of targets) {
     const page = dir.endsWith('web') ? 'index.html' : 'studio.html';
-    for (const file of [page, 'app.js', 'worker.js', 'styles.css', 'pdf.worker.mjs', 'cmaps', 'standard_fonts', 'THIRD_PARTY_LICENSES.txt']) {
+    const files = [page, 'app.js', 'worker.js', 'styles.css', 'pdf.worker.mjs', 'cmaps', 'standard_fonts', 'THIRD_PARTY_LICENSES.txt'];
+    if (dir.endsWith('web')) files.push('pageRanges.js');
+    for (const file of files) {
       await access(`${dir}/${file}`);
     }
     assert.ok((await readdir(`${dir}/standard_fonts`)).length > 0);
@@ -93,6 +95,15 @@ test('built worker bundle runs the real protocol: merge, split, rotate, inspect,
   const bad = await call('b', 'merge', { files: [new Uint8Array([1, 2, 3]).buffer] });
   assert.equal(bad.type, 'error');
   assert.equal(bad.error.code, 'INVALID_PDF');
+
+  const badSplit = await call('bs', 'split', { file: merged.result.bytes.slice().buffer, selection: '2abc' });
+  assert.equal(badSplit.type, 'error');
+  assert.equal(badSplit.error.code, 'INVALID_PAGE_RANGE');
+
+  const badRotate = await call('br', 'rotate', { file: merged.result.bytes.slice().buffer, requests: [{ pages: '2abc', degrees: '90' }] });
+  assert.equal(badRotate.type, 'error');
+  assert.equal(badRotate.error.code, 'INVALID_PAGE_RANGE');
+
   const nope = await call('n', 'nope', {});
   assert.equal(nope.error.code, 'UNKNOWN_ACTION');
 });
