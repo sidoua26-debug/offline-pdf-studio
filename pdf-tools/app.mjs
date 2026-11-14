@@ -165,28 +165,43 @@ $('merge-run').addEventListener('click', () =>
 
 // ---- Single-file tools (split, rotate, metadata) ----
 function bindSingle({ input, button, onLoaded }) {
-  const state = { file: null, bytes: null, pageCount: 0, busy: false };
+  const state = { file: null, bytes: null, pageCount: 0, busy: false, ready: false };
+  let currentGeneration = 0;
+
   $(input).addEventListener('change', async (event) => {
+    const generation = ++currentGeneration;
     state.file = event.target.files[0] ?? null;
     event.target.value = ''; // lets the same file be picked again after an error or edit
+    state.ready = false;
     state.bytes = null;
     state.pageCount = 0;
     $(button).disabled = true;
+    try { onLoaded?.(null); } catch (e) { console.error(e); }
     if (!state.file) {
-      try { onLoaded?.(null); } catch (e) { console.error(e); }
       return;
     }
     try {
-      state.bytes = await readPdf(state.file);
-      const buf = state.bytes.slice().buffer;
+      const pickedFile = state.file;
+      const bytes = await readPdf(pickedFile);
+      if (generation !== currentGeneration) return;
+      const buf = bytes.slice().buffer;
       const info = await controller.request('inspect', { file: buf }, { transfer: [buf] });
+      if (generation !== currentGeneration) return;
+      state.bytes = bytes;
       state.pageCount = info.metadata.pageCount;
-      say(`${state.file.name}: ${info.metadata.pageCount} page(s).`);
-      $(button).disabled = false;
-      onLoaded?.(info);
+      state.ready = true;
+      say(`${pickedFile.name}: ${info.metadata.pageCount} page(s).`);
+      if (onLoaded) {
+        onLoaded(info);
+      } else {
+        $(button).disabled = false;
+      }
     } catch (error) {
+      if (generation !== currentGeneration) return;
+      state.ready = false;
       state.bytes = null;
       state.pageCount = 0;
+      $(button).disabled = true;
       try { onLoaded?.(null); } catch (e) { console.error(e); }
       fail(error);
     }
@@ -196,7 +211,7 @@ function bindSingle({ input, button, onLoaded }) {
 
 function updateSplitButton() {
   const btn = $('split-run');
-  if (split.busy || !split.bytes || !split.pageCount) {
+  if (split.busy || !split.ready || !split.bytes || !split.pageCount) {
     btn.disabled = true;
     return;
   }
@@ -219,17 +234,18 @@ const split = bindSingle({
 $('split-pages').addEventListener('input', updateSplitButton);
 
 $('split-run').addEventListener('click', () => {
-  if (split.busy || !split.bytes || !split.pageCount) return;
+  if (split.busy || !split.ready || !split.bytes || !split.pageCount) return;
   const val = $('split-pages').value.trim();
   if (!val || !validatePageSelection(val, split.pageCount).valid) return;
   split.busy = true;
   $('split-run').setAttribute('aria-busy', 'true');
   updateSplitButton();
   window.dispatchEvent(new CustomEvent('pdfstudio:busychange', { detail: { tool: 'split', busy: true } }));
+  const currentFile = split.file;
   busy($('split-run'), 'Extracting…', async () => {
     const buf = split.bytes.slice().buffer;
     const { bytes } = await controller.request('split', { file: buf, selection: $('split-pages').value }, { transfer: [buf] });
-    download(bytes, `${baseName(split.file)}-extract.pdf`);
+    download(bytes, `${baseName(currentFile)}-extract.pdf`);
     say('Extracted pages downloaded.', 'ok');
   }, () => {
     split.busy = false;
@@ -241,7 +257,7 @@ $('split-run').addEventListener('click', () => {
 
 function updateRotateButton() {
   const btn = $('rotate-run');
-  if (rotate.busy || !rotate.bytes || !rotate.pageCount) {
+  if (rotate.busy || !rotate.ready || !rotate.bytes || !rotate.pageCount) {
     btn.disabled = true;
     return;
   }
@@ -264,20 +280,21 @@ const rotate = bindSingle({
 $('rotate-pages').addEventListener('input', updateRotateButton);
 
 $('rotate-run').addEventListener('click', () => {
-  if (rotate.busy || !rotate.bytes || !rotate.pageCount) return;
+  if (rotate.busy || !rotate.ready || !rotate.bytes || !rotate.pageCount) return;
   const val = $('rotate-pages').value.trim();
   if (!val || !validatePageSelection(val, rotate.pageCount).valid) return;
   rotate.busy = true;
   $('rotate-run').setAttribute('aria-busy', 'true');
   updateRotateButton();
   window.dispatchEvent(new CustomEvent('pdfstudio:busychange', { detail: { tool: 'rotate', busy: true } }));
+  const currentFile = rotate.file;
   busy($('rotate-run'), 'Rotating…', async () => {
     const buf = rotate.bytes.slice().buffer;
     const degrees = $('rotate-degrees').value;
     // "Reset" sets an absolute 0°; every other choice turns the page from where it is now.
     const requests = [{ pages: $('rotate-pages').value, degrees: degrees === 'reset' ? 0 : degrees, relative: degrees !== 'reset' }];
     const { bytes } = await controller.request('rotate', { file: buf, requests }, { transfer: [buf] });
-    download(bytes, `${baseName(rotate.file)}-rotated.pdf`);
+    download(bytes, `${baseName(currentFile)}-rotated.pdf`);
     say('Rotated PDF downloaded.', 'ok');
   }, () => {
     rotate.busy = false;
@@ -308,17 +325,20 @@ const meta = bindSingle({
       tr.insertCell().textContent = value === null || value === '' ? '(empty)' : String(value);
     }
     $('meta-table').hidden = false;
+    $('meta-run').disabled = false;
   }
 });
-$('meta-run').addEventListener('click', () =>
+$('meta-run').addEventListener('click', () => {
+  const currentFile = meta.file;
   busy($('meta-run'), 'Clearing metadata…', async () => {
     const buf = meta.bytes.slice().buffer;
     const { bytes } = await controller.request('sanitize', { file: buf }, { transfer: [buf] });
-    download(bytes, `${baseName(meta.file)}-clean.pdf`);
+    download(bytes, `${baseName(currentFile)}-clean.pdf`);
     say('Cleaned PDF downloaded. Only the Info dictionary was cleared; see "What is and isn\'t cleaned".', 'ok');
   }, () => {
-    $('meta-run').disabled = !meta.bytes;
-  }));
+    $('meta-run').disabled = !meta.ready || !meta.bytes;
+  });
+});
 
 // ---- Compress ----
 const compress = bindSingle({
@@ -332,9 +352,11 @@ const compress = bindSingle({
     }
     const kb = (compress.bytes.byteLength / 1024).toFixed(0);
     $('compress-summary').textContent = `${compress.file.name}: ${info.metadata.pageCount} page(s), ${kb} KB. Ready to compress.`;
+    $('compress-run').disabled = false;
   }
 });
-$('compress-run').addEventListener('click', () =>
+$('compress-run').addEventListener('click', () => {
+  const currentFile = compress.file;
   busy($('compress-run'), 'Compressing…', async () => {
     const quality = Number($('compress-quality').value);
     const scale = Number($('compress-scale').value);
@@ -350,14 +372,15 @@ $('compress-run').addEventListener('click', () =>
       const origKb = (result.originalBytes / 1024).toFixed(0);
       const compKb = (result.compressedBytes / 1024).toFixed(0);
       const pct = ((1 - result.ratio) * 100).toFixed(0);
-      download(result.bytes, `${baseName(compress.file)}-compressed.pdf`);
+      download(result.bytes, `${baseName(currentFile)}-compressed.pdf`);
       say(`Compressed PDF downloaded: ${origKb} KB → ${compKb} KB (${pct}% reduction).`, 'ok');
     } finally {
       await renderer.close();
     }
   }, () => {
-    $('compress-run').disabled = !compress.bytes;
-  }));
+    $('compress-run').disabled = !compress.ready || !compress.bytes;
+  });
+});
 
 // ---- Redaction ----
 let redactSource = null;
